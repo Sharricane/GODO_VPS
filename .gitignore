@@ -1,0 +1,112 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# GODO_VPS — .gitignore
+# Repo is PUBLIC. Anything with real credentials must NEVER be committed.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Secrets & credentials (CRITICAL) ─────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.secret
+vps-info.txt
+vps-info.md
+server-info.*
+credentials.*
+
+# ── SSH keys & TLS certs ──────────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+id_ecdsa
+id_ecdsa.pub
+known_hosts
+authorized_keys
+
+# ── Generated client configs (contain real UUIDs / passwords) ─────────────────
+out/
+generated/
+subscription.txt
+subscription.b64
+*.yaml.out
+*.json.out
+clash-config-real.yaml
+client-config-real.*
+
+# ── Logs & backups ────────────────────────────────────────────────────────────
+*.log
+*.log.*
+logs/
+*.bak
+*.bak.*
+backup/
+backups/
+*.orig
+
+# ── Rust build artifacts ──────────────────────────────────────────────────────
+/target/
+Cargo.lock
+
+# ── Python artifacts ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+pip-log.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Node.js artifacts ─────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.npm/
+.yarn/
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+
+# ── Windows ──────────────────────────────────────────────────────────────────
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ── Linux ────────────────────────────────────────────────────────────────────
+*~
+.nfs*
+
+# ── IDE & editors ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.cursor/
