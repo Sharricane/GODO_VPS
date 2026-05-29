@@ -31,11 +31,14 @@ pub async fn run(args: MonitorArgs) -> Result<()> {
                 was_down = true;
                 notifier.alert_down(&args.host, &h.summary()).await;
 
-                // Try auto-restart
-                tracing::info!("auto-restarting sing-box on {}", args.host);
-                let _ = health::restart_singbox(
-                    &args.host, args.ssh_port, &args.user, args.ssh_key.as_deref(),
-                ).await;
+                if args.allow_restart {
+                    tracing::warn!("auto-restarting sing-box on {} (kicks all clients)", args.host);
+                    let _ = health::restart_singbox(
+                        &args.host, args.ssh_port, &args.user, args.ssh_key.as_deref(),
+                    ).await;
+                } else {
+                    tracing::info!("auto-restart disabled (pass --allow-restart to enable)");
+                }
             }
         } else if was_down {
             was_down = false;

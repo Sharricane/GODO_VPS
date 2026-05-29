@@ -27,5 +27,6 @@ async fn main() -> Result<()> {
         Commands::Sub(args)             => config::sub::run(args).await,
         Commands::Status(args)          => monitor::status::run(args).await,
         Commands::Monitor(args)         => monitor::daemon::run(args).await,
+        Commands::Diag(args)            => monitor::diag::run(args).await,
     }
 }

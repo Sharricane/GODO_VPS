@@ -12,13 +12,22 @@ pub struct Ssh {
     key:  Option<String>,
 }
 
+fn expand_tilde(p: &str) -> String {
+    if let Some(rest) = p.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return std::path::Path::new(&home).join(rest).to_string_lossy().into_owned();
+        }
+    }
+    p.to_string()
+}
+
 impl Ssh {
     pub fn new(host: &str, port: u16, user: &str, key: Option<&str>) -> Self {
         Self {
             host: host.to_string(),
             port,
             user: user.to_string(),
-            key: key.map(|s| s.to_string()),
+            key: key.map(expand_tilde),
         }
     }
 

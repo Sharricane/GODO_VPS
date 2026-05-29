@@ -38,14 +38,21 @@ pub async fn check(
     let vless_tcp = Ssh::tcp_open(host, vless_port, 10).await;
     let latency_ms = if vless_tcp { Some(t0.elapsed().as_millis()) } else { None };
 
-    // UDP check via nc (best-effort; Hy2 also listens on TCP for QUIC handshake)
-    let hy2_udp = Ssh::tcp_open(host, hy2_port, 10).await;
-
     let ssh = Ssh::new(host, ssh_port, user, key);
     let singbox_running = ssh
         .exec("systemctl is-active sing-box")
         .await
         .map(|o| o.trim() == "active")
+        .unwrap_or(false);
+
+    // Hy2 is UDP-only — TCP probe is meaningless, ask the host whether sing-box
+    // actually has a UDP socket bound on the configured port.
+    let hy2_udp = ssh
+        .exec(&format!(
+            "ss -uln 2>/dev/null | grep -qE ':{hy2_port}[[:space:]]' && echo yes || echo no"
+        ))
+        .await
+        .map(|o| o.trim() == "yes")
         .unwrap_or(false);
 
     NodeHealth { host: host.to_string(), vless_tcp, hy2_udp, singbox_running, latency_ms }

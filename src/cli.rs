@@ -25,6 +25,28 @@ pub enum Commands {
     Status(StatusArgs),
     /// Run continuous health monitor with Telegram alerts
     Monitor(MonitorArgs),
+    /// Pull full read-only diagnostics: BBR, TCP retrans, UDP errors, scanner IPs, journal errors
+    Diag(DiagArgs),
+}
+
+// ── diag ─────────────────────────────────────────────────────────────────────
+
+#[derive(Args)]
+pub struct DiagArgs {
+    #[arg(long, env = "VPS_HOST")]
+    pub host: String,
+
+    #[arg(long, env = "VPS_SSH_PORT", default_value = "22")]
+    pub ssh_port: u16,
+
+    #[arg(long, env = "VPS_USER", default_value = "root")]
+    pub user: String,
+
+    #[arg(long, env = "VPS_SSH_KEY")]
+    pub ssh_key: Option<String>,
+
+    #[arg(long, default_value = "1", help = "Look-back window in hours for journal errors")]
+    pub since_hours: u32,
 }
 
 // ── bootstrap ───────────────────────────────────────────────────────────────
@@ -128,6 +150,12 @@ pub struct ClientConfigArgs {
     #[arg(long, env = "REALITY_SHORT_ID")]
     pub reality_short_id: String,
 
+    #[arg(long, env = "CF_SUBDOMAIN", help = "Cloudflare-fronted subdomain for VMess-WS (e.g. cdn.example.com); omit to skip CDN node")]
+    pub cdn_host: Option<String>,
+
+    #[arg(long, help = "Generate iOS-compatible config (strips dns.listen, external-controller, fake-ip; trims rule-providers for 50MB VPN extension limit)")]
+    pub ios: bool,
+
     #[arg(long, short, help = "Output file path (default: stdout)")]
     pub output: Option<String>,
 }
@@ -173,6 +201,15 @@ pub struct StatusArgs {
 
     #[arg(long, env = "SINGBOX_HY2_PORT", default_value = "8443")]
     pub hy2_port: u16,
+
+    #[arg(long, env = "VPS_SSH_PORT", default_value = "22")]
+    pub ssh_port: u16,
+
+    #[arg(long, env = "VPS_USER", default_value = "root")]
+    pub user: String,
+
+    #[arg(long, env = "VPS_SSH_KEY")]
+    pub ssh_key: Option<String>,
 }
 
 // ── monitor ──────────────────────────────────────────────────────────────────
@@ -206,4 +243,8 @@ pub struct MonitorArgs {
 
     #[arg(long, env = "VPS_SSH_KEY")]
     pub ssh_key: Option<String>,
+
+    #[arg(long, env = "ALLOW_AUTO_RESTART",
+          help = "Auto-restart sing-box when unhealthy (off by default — would kick all clients)")]
+    pub allow_restart: bool,
 }
