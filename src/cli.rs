@@ -159,6 +159,9 @@ pub struct ClientConfigArgs {
     #[arg(long, help = "Generate ULTRA-minimal iOS config (no rule-providers, no GEOIP, IPv4-only) to dodge ClashMi issue #195 rules-mode bug")]
     pub ios_minimal: bool,
 
+    #[arg(long, help = "Generate Clash for Windows (legacy Dreamacro core) variant — drops VLESS/Reality/Hysteria2/sniffer which CFW doesn't support, keeps only CDN-VMess")]
+    pub cfw: bool,
+
     #[arg(long, short, help = "Output file path (default: stdout)")]
     pub output: Option<String>,
 }
