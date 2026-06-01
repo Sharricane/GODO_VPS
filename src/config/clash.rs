@@ -80,7 +80,6 @@ mode: rule
 log-level: info
 ipv6: true
 external-controller: 127.0.0.1:9090
-external-ui: ui
 
 dns:
   enable: true
