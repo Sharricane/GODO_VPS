@@ -156,6 +156,9 @@ pub struct ClientConfigArgs {
     #[arg(long, help = "Generate iOS-compatible config (strips dns.listen, external-controller, fake-ip; trims rule-providers for 50MB VPN extension limit)")]
     pub ios: bool,
 
+    #[arg(long, help = "Generate ULTRA-minimal iOS config (no rule-providers, no GEOIP, IPv4-only) to dodge ClashMi issue #195 rules-mode bug")]
+    pub ios_minimal: bool,
+
     #[arg(long, short, help = "Output file path (default: stdout)")]
     pub output: Option<String>,
 }

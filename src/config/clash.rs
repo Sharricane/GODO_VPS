@@ -4,7 +4,11 @@ use colored::Colorize;
 use std::fs;
 
 pub async fn run(args: ClientConfigArgs) -> Result<()> {
-    let yaml = if args.ios {
+    let yaml = if args.ios_minimal {
+        build_clash_yaml_ios_minimal(
+            &args.uuid, args.cdn_host.as_deref(),
+        )
+    } else if args.ios {
         build_clash_yaml_ios(
             &args.host, args.vless_port, args.hy2_port,
             &args.sni, &args.uuid,
@@ -166,17 +170,22 @@ proxy-groups:
       - DIRECT
 
   - name: "OpenAI"
-    type: select
+    type: fallback
     proxies:
+{cdn_in_fallback}      - SG-Hysteria2
       - SG-Reality
-      - SG-Hysteria2
+    url: "https://www.gstatic.com/generate_204"
+    interval: 60
+    lazy: true
 
   - name: "Streaming"
-    type: select
+    type: fallback
     proxies:
+{cdn_in_fallback}      - SG-Hysteria2
       - SG-Reality
-      - SG-Hysteria2
-      - DIRECT
+    url: "https://www.gstatic.com/generate_204"
+    interval: 60
+    lazy: true
 
   - name: "Final"
     type: select
@@ -492,93 +501,55 @@ proxy-groups:
       - SG-Hysteria2
       - DIRECT
 
-rule-providers:
-  cncidr:
-    type: http
-    behavior: ipcidr
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt"
-    path: ./ruleset/cncidr.yaml
-    interval: 86400
-  proxy:
-    type: http
-    behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/proxy.txt"
-    path: ./ruleset/proxy.yaml
-    interval: 86400
-  gfw:
-    type: http
-    behavior: domain
-    url: "https://cdn.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/gfw.txt"
-    path: ./ruleset/gfw.yaml
-    interval: 86400
-
 rules:
-  # === 我们自己的代理域名永远直连，否则会死循环 ===
+  # Self-proxy domain MUST go DIRECT or we get an infinite loop.
   - DOMAIN-SUFFIX,xn--7xa.monster,DIRECT
 
-  # === HKUST 校园 → 直连 ===
-  - IP-CIDR,143.89.0.0/16,DIRECT,no-resolve
-  - IP-CIDR,175.159.0.0/16,DIRECT,no-resolve
+  # LAN / loopback — always DIRECT.
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - DOMAIN-SUFFIX,local,DIRECT
+  - DOMAIN-SUFFIX,lan,DIRECT
 
-  # === 国内大厂域名（最常用的，inline 进来，省 rule-provider）===
-  - DOMAIN-SUFFIX,xiaohongshu.com,DIRECT
-  - DOMAIN-SUFFIX,xhscdn.com,DIRECT
+  # Bilibili — forced DIRECT (user requested).
   - DOMAIN-SUFFIX,bilibili.com,DIRECT
   - DOMAIN-SUFFIX,bilivideo.com,DIRECT
+  - DOMAIN-SUFFIX,bilivideo.cn,DIRECT
   - DOMAIN-SUFFIX,b23.tv,DIRECT
+  - DOMAIN-SUFFIX,bilicdn1.com,DIRECT
+  - DOMAIN-SUFFIX,biliapi.net,DIRECT
+  - DOMAIN-SUFFIX,biliapi.com,DIRECT
   - DOMAIN-SUFFIX,hdslb.com,DIRECT
-  - DOMAIN-SUFFIX,weibo.com,DIRECT
-  - DOMAIN-SUFFIX,weixin.qq.com,DIRECT
+  - DOMAIN-SUFFIX,akamaized.net,DIRECT
+  - DOMAIN-KEYWORD,bilibili,DIRECT
+
+  # WeChat / Tencent IM — forced DIRECT (user requested).
   - DOMAIN-SUFFIX,wechat.com,DIRECT
-  - DOMAIN-SUFFIX,qq.com,DIRECT
-  - DOMAIN-SUFFIX,tencent.com,DIRECT
+  - DOMAIN-SUFFIX,weixin.qq.com,DIRECT
+  - DOMAIN-SUFFIX,weixin.com,DIRECT
   - DOMAIN-SUFFIX,qpic.cn,DIRECT
+  - DOMAIN-SUFFIX,wx.qlogo.cn,DIRECT
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  - DOMAIN-SUFFIX,qlogo.cn,DIRECT
+  - DOMAIN-SUFFIX,gtimg.com,DIRECT
   - DOMAIN-SUFFIX,gtimg.cn,DIRECT
-  - DOMAIN-SUFFIX,douyin.com,DIRECT
-  - DOMAIN-SUFFIX,douyinpic.com,DIRECT
-  - DOMAIN-SUFFIX,douyinvod.com,DIRECT
-  - DOMAIN-SUFFIX,zhihu.com,DIRECT
-  - DOMAIN-SUFFIX,zhimg.com,DIRECT
-  - DOMAIN-SUFFIX,iqiyi.com,DIRECT
-  - DOMAIN-SUFFIX,youku.com,DIRECT
-  - DOMAIN-SUFFIX,mgtv.com,DIRECT
-  - DOMAIN-SUFFIX,alipay.com,DIRECT
-  - DOMAIN-SUFFIX,taobao.com,DIRECT
-  - DOMAIN-SUFFIX,tmall.com,DIRECT
-  - DOMAIN-SUFFIX,jd.com,DIRECT
-  - DOMAIN-SUFFIX,meituan.com,DIRECT
-  - DOMAIN-SUFFIX,meituan.net,DIRECT
+  - DOMAIN-SUFFIX,tencent.com,DIRECT
+  - DOMAIN-SUFFIX,tencent-cloud.net,DIRECT
+  - DOMAIN-KEYWORD,wechat,DIRECT
+  - DOMAIN-KEYWORD,weixin,DIRECT
 
-  # === 香港本地 → 直连 ===
-  - GEOIP,HK,DIRECT,no-resolve
-  - DOMAIN-SUFFIX,hk,DIRECT
+  # Xiaohongshu — forced DIRECT (user requested).
+  - DOMAIN-SUFFIX,xiaohongshu.com,DIRECT
+  - DOMAIN-SUFFIX,xhscdn.com,DIRECT
+  - DOMAIN-SUFFIX,xhsstatic.com,DIRECT
+  - DOMAIN-SUFFIX,rednotecdn.com,DIRECT
+  - DOMAIN-SUFFIX,xhs.cn,DIRECT
+  - DOMAIN-KEYWORD,xiaohongshu,DIRECT
+  - DOMAIN-KEYWORD,xhscdn,DIRECT
 
-  # === 走代理的关键服务 ===
-  # OpenAI / ChatGPT / Atlas browser (Atlas uses chatgpt.com + Bing as search backend)
-  - DOMAIN-SUFFIX,openai.com,Proxy
-  - DOMAIN-SUFFIX,chatgpt.com,Proxy
-  - DOMAIN-SUFFIX,oaistatic.com,Proxy
-  - DOMAIN-SUFFIX,oaiusercontent.com,Proxy
-  - DOMAIN-KEYWORD,openai,Proxy
-  - DOMAIN-SUFFIX,bing.com,Proxy
-  - DOMAIN-SUFFIX,bing.net,Proxy
-  - DOMAIN-SUFFIX,b-msn.com,Proxy
-  # Anthropic / Claude
-  - DOMAIN-SUFFIX,anthropic.com,Proxy
-  - DOMAIN-SUFFIX,claude.ai,Proxy
-  - DOMAIN-KEYWORD,claude,Proxy
-  # Streaming
-  - DOMAIN-SUFFIX,netflix.com,Proxy
-  - DOMAIN-SUFFIX,spotify.com,Proxy
-
-  # === 规则集（仅保留 3 个核心，控制内存）===
-  - RULE-SET,gfw,Proxy
-  - RULE-SET,proxy,Proxy
-  - RULE-SET,cncidr,DIRECT,no-resolve
-
-  # === 最终兜底 ===
-  - GEOIP,LAN,DIRECT,no-resolve
-  - GEOIP,CN,DIRECT,no-resolve
+  # Everything else — through Proxy by default.
   - MATCH,Proxy
 "#,
         host = host,
@@ -589,5 +560,163 @@ rules:
         hy2_pass = hy2_pass,
         pub_key = pub_key,
         short_id = short_id,
+    )
+}
+
+/// Ultra-minimal Clash/Mihomo config for ClashMi rules-mode bug (issue #195).
+///
+/// Strips everything optional: no rule-providers, no GEOIP, IPv4-only, single
+/// proxy node (CDN-VMess only), one proxy-group. All routing decisions are
+/// made by inline DOMAIN-SUFFIX rules to minimize work for the rules engine.
+/// Mainland China major domains go DIRECT inline; everything else goes
+/// through CDN-VMess.
+pub fn build_clash_yaml_ios_minimal(uuid: &str, cdn_host: Option<&str>) -> String {
+    let h = cdn_host.unwrap_or("cdn.example.com");
+    format!(
+        r#"# Generated by godo-vps (iOS minimal variant) — for ClashMi issue #195 workaround.
+# No rule-providers, no GEOIP, IPv4-only, single proxy. Refresh subscription to update.
+mixed-port: 7890
+mode: rule
+log-level: silent
+ipv6: false
+
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "{h}"
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - 1.1.1.1
+    - 8.8.8.8
+
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  override-destination: true
+  sniff:
+    TLS:
+      ports: [443]
+    QUIC:
+      ports: [443]
+
+proxies:
+  - name: CDN
+    type: vmess
+    server: {h}
+    port: 443
+    uuid: {uuid}
+    alterId: 0
+    cipher: auto
+    network: ws
+    tls: true
+    servername: {h}
+    skip-cert-verify: false
+    ws-opts:
+      path: /vmws
+      headers:
+        Host: {h}
+
+proxy-groups:
+  - name: Proxy
+    type: select
+    proxies:
+      - CDN
+      - DIRECT
+
+rules:
+  - DOMAIN-SUFFIX,{h},DIRECT
+  - DOMAIN-SUFFIX,xn--7xa.monster,DIRECT
+  - DOMAIN-SUFFIX,anthropic.com,Proxy
+  - DOMAIN-SUFFIX,claude.ai,Proxy
+  - DOMAIN-KEYWORD,claude,Proxy
+  - DOMAIN-SUFFIX,openai.com,Proxy
+  - DOMAIN-SUFFIX,chatgpt.com,Proxy
+  - DOMAIN-SUFFIX,oaistatic.com,Proxy
+  - DOMAIN-SUFFIX,oaiusercontent.com,Proxy
+  - DOMAIN-KEYWORD,openai,Proxy
+  - DOMAIN-SUFFIX,bing.com,Proxy
+  - DOMAIN-SUFFIX,b-msn.com,Proxy
+  - DOMAIN-SUFFIX,google.com,Proxy
+  - DOMAIN-SUFFIX,googleapis.com,Proxy
+  - DOMAIN-SUFFIX,gstatic.com,Proxy
+  - DOMAIN-SUFFIX,youtube.com,Proxy
+  - DOMAIN-SUFFIX,ytimg.com,Proxy
+  - DOMAIN-SUFFIX,ggpht.com,Proxy
+  - DOMAIN-SUFFIX,facebook.com,Proxy
+  - DOMAIN-SUFFIX,fbcdn.net,Proxy
+  - DOMAIN-SUFFIX,instagram.com,Proxy
+  - DOMAIN-SUFFIX,twitter.com,Proxy
+  - DOMAIN-SUFFIX,x.com,Proxy
+  - DOMAIN-SUFFIX,t.co,Proxy
+  - DOMAIN-SUFFIX,github.com,Proxy
+  - DOMAIN-SUFFIX,githubusercontent.com,Proxy
+  - DOMAIN-SUFFIX,githubassets.com,Proxy
+  - DOMAIN-SUFFIX,wikipedia.org,Proxy
+  - DOMAIN-SUFFIX,reddit.com,Proxy
+  - DOMAIN-SUFFIX,discord.com,Proxy
+  - DOMAIN-SUFFIX,telegram.org,Proxy
+  - DOMAIN-SUFFIX,t.me,Proxy
+  - DOMAIN-SUFFIX,whatsapp.com,Proxy
+  - DOMAIN-SUFFIX,netflix.com,Proxy
+  - DOMAIN-SUFFIX,nflxvideo.net,Proxy
+  - DOMAIN-SUFFIX,spotify.com,Proxy
+  - DOMAIN-SUFFIX,cn,DIRECT
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
+  - DOMAIN-SUFFIX,bdimg.com,DIRECT
+  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
+  - DOMAIN-SUFFIX,bilibili.com,DIRECT
+  - DOMAIN-SUFFIX,bilivideo.com,DIRECT
+  - DOMAIN-SUFFIX,b23.tv,DIRECT
+  - DOMAIN-SUFFIX,hdslb.com,DIRECT
+  - DOMAIN-SUFFIX,weibo.com,DIRECT
+  - DOMAIN-SUFFIX,weibo.cn,DIRECT
+  - DOMAIN-SUFFIX,sinaimg.cn,DIRECT
+  - DOMAIN-SUFFIX,weixin.qq.com,DIRECT
+  - DOMAIN-SUFFIX,wechat.com,DIRECT
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  - DOMAIN-SUFFIX,tencent.com,DIRECT
+  - DOMAIN-SUFFIX,qpic.cn,DIRECT
+  - DOMAIN-SUFFIX,gtimg.cn,DIRECT
+  - DOMAIN-SUFFIX,douyin.com,DIRECT
+  - DOMAIN-SUFFIX,douyinpic.com,DIRECT
+  - DOMAIN-SUFFIX,douyinvod.com,DIRECT
+  - DOMAIN-SUFFIX,bytedance.com,DIRECT
+  - DOMAIN-SUFFIX,toutiao.com,DIRECT
+  - DOMAIN-SUFFIX,xiaohongshu.com,DIRECT
+  - DOMAIN-SUFFIX,xhscdn.com,DIRECT
+  - DOMAIN-SUFFIX,zhihu.com,DIRECT
+  - DOMAIN-SUFFIX,zhimg.com,DIRECT
+  - DOMAIN-SUFFIX,iqiyi.com,DIRECT
+  - DOMAIN-SUFFIX,youku.com,DIRECT
+  - DOMAIN-SUFFIX,mgtv.com,DIRECT
+  - DOMAIN-SUFFIX,alipay.com,DIRECT
+  - DOMAIN-SUFFIX,alipayobjects.com,DIRECT
+  - DOMAIN-SUFFIX,taobao.com,DIRECT
+  - DOMAIN-SUFFIX,tmall.com,DIRECT
+  - DOMAIN-SUFFIX,tbcdn.cn,DIRECT
+  - DOMAIN-SUFFIX,jd.com,DIRECT
+  - DOMAIN-SUFFIX,360buyimg.com,DIRECT
+  - DOMAIN-SUFFIX,meituan.com,DIRECT
+  - DOMAIN-SUFFIX,meituan.net,DIRECT
+  - DOMAIN-SUFFIX,dianping.com,DIRECT
+  - DOMAIN-SUFFIX,aliyun.com,DIRECT
+  - DOMAIN-SUFFIX,aliyuncs.com,DIRECT
+  - DOMAIN-SUFFIX,163.com,DIRECT
+  - DOMAIN-SUFFIX,126.com,DIRECT
+  - DOMAIN-SUFFIX,netease.com,DIRECT
+  - DOMAIN-SUFFIX,sina.com.cn,DIRECT
+  - DOMAIN-SUFFIX,sohu.com,DIRECT
+  - DOMAIN-SUFFIX,12306.cn,DIRECT
+  - DOMAIN-SUFFIX,gov.cn,DIRECT
+  - DOMAIN-SUFFIX,edu.cn,DIRECT
+  - MATCH,Proxy
+"#,
+        h = h,
+        uuid = uuid,
     )
 }
