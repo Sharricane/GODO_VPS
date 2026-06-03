@@ -348,6 +348,29 @@ rules:
   - DOMAIN-SUFFIX,netflix.com,Streaming
   - DOMAIN-SUFFIX,nflxvideo.net,Streaming
   - DOMAIN-SUFFIX,spotify.com,Streaming
+  # Telegram - Android client hard-codes DC IPs (does not query DNS), so domain
+  # rules never fire. These IPv4 CIDRs are MTProto data-center ranges, inlined
+  # here so the jsdelivr-hosted telegramcidr rule-provider is not a single point
+  # of failure (jsdelivr is slow/unreachable from mainland China).
+  - DOMAIN-SUFFIX,telegram.org,Proxy
+  - DOMAIN-SUFFIX,telegram.me,Proxy
+  - DOMAIN-SUFFIX,t.me,Proxy
+  - DOMAIN-SUFFIX,tdesktop.com,Proxy
+  - DOMAIN-SUFFIX,telesco.pe,Proxy
+  - DOMAIN-SUFFIX,telegra.ph,Proxy
+  - IP-CIDR,91.108.4.0/22,Proxy,no-resolve
+  - IP-CIDR,91.108.8.0/21,Proxy,no-resolve
+  - IP-CIDR,91.108.16.0/21,Proxy,no-resolve
+  - IP-CIDR,91.108.36.0/23,Proxy,no-resolve
+  - IP-CIDR,91.108.38.0/23,Proxy,no-resolve
+  - IP-CIDR,91.108.56.0/22,Proxy,no-resolve
+  - IP-CIDR,95.161.64.0/20,Proxy,no-resolve
+  - IP-CIDR,109.239.140.0/24,Proxy,no-resolve
+  - IP-CIDR,149.154.160.0/20,Proxy,no-resolve
+  - IP-CIDR6,2001:67c:4e8::/48,Proxy,no-resolve
+  - IP-CIDR6,2001:b28:f23c::/48,Proxy,no-resolve
+  - IP-CIDR6,2001:b28:f23d::/48,Proxy,no-resolve
+  - IP-CIDR6,2001:b28:f23f::/48,Proxy,no-resolve
   - RULE-SET,telegramcidr,Proxy,no-resolve
   - RULE-SET,proxy,Proxy
   - RULE-SET,gfw,Proxy
@@ -762,9 +785,10 @@ proxies:
     skip-cert-verify: false
     servername: {h}
     network: ws
-    ws-path: /vmws
-    ws-headers:
-      Host: {h}
+    ws-opts:
+      path: "/vmws"
+      headers:
+        Host: "{h}"
 
 proxy-groups:
   - name: "Proxy"
