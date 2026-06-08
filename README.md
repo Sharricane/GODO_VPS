@@ -62,7 +62,8 @@ Each device type pulls its own YAML; the server hosts them all from
 | iOS (ClashMi)   | `/ios-clash-mi.yaml`           | minimal, default-Proxy with three CN apps DIRECT         |
 | Android (CMFA)  | `/android-clash-vmess.yaml`    | full                                                     |
 | macOS (ClashX)  | `/mac-clashx-pro.yaml`         | full                                                     |
-| Windows (Verge) | `/windows-clash-vless.yaml`    | full                                                     |
+| Windows (Verge) | `/windows-clash-vless.yaml`    | full (mihomo)                                            |
+| Windows (CFW)   | `--cfw` output                 | CFW-legacy: Direct-VMess + CDN-VMess (no VLESS/Hy2)      |
 | Generic         | `/<hash>.yaml`                 | full                                                     |
 
 ### The full variant
@@ -73,9 +74,19 @@ Used by Windows / macOS / Android. Contains everything: three proxy nodes
 sniffer block that recovers TLS-SNI / QUIC ClientHello / HTTP Host so HTTP/3
 apps still match domain rules under fake-ip.
 
-Group `Proxy`, `OpenAI`, and `Streaming` are all `type: fallback` ordered
-`CDN-VMess -> SG-Hysteria2 -> SG-Reality`. The client tries the CDN path
-first; on a mainland-CN network you should see CDN-VMess get selected.
+Group `Proxy`, `OpenAI`, and `Streaming` are all `type: fallback`. The main
+variant orders them `CDN-VMess -> SG-Hysteria2 -> SG-Reality` (CDN first
+because the typical client is on a CN ISP being DPI-throttled). The `--ios`
+variant flips that ordering to `SG-Reality -> SG-Hysteria2 -> CDN-VMess`
+because iOS users are usually on HK/overseas networks where the direct
+Reality path is fastest and the CDN URL-test probe occasionally times out.
+
+Every variant now pins Google domains (`google.com`, `googleapis.com`,
+`gstatic.com`, `youtube.com`, `googleadservices.com`, etc.) to `Proxy`
+**before** any RULE-SET match. Without this, Loyalsoldier's `direct.txt`
+catches `clientservices.googleapis.com`, `adservice.google.com`,
+`dl.google.com` and routes them DIRECT - the search page still loads but
+SafeBrowsing / autocomplete / Ads / Maps APIs silently fail in HK and CN.
 
 ### The iOS variant (`--ios`)
 
@@ -237,6 +248,8 @@ Pages site, other subdomains) keeps its existing SSL mode.
 | ChatGPT works but Claude doesn't on iOS                             | iOS Claude app uses HTTP/3; ensure `sniffer` block is loaded (check for unquoted port ranges)    |
 | Atlas browser search fails                                          | Atlas uses `chatgpt.com` + `bing.com` as backends; both must have explicit DOMAIN-SUFFIX rules   |
 | Mac / Windows DIRECT slow                                           | Stale subscription with old rule-providers - delete subscription entry, re-add URL, kill client  |
+| Mac (ClashX Pro) or Android (legacy Clash) reports `unsupport type vless` | Client uses legacy Clash core (no VLESS / Hysteria2). Switch them to the `--cfw` (legacy) variant - VMess-only with Direct-VMess + CDN-VMess |
+| Google search loads but autocomplete / images / Ads / Maps silently fail | Loyalsoldier `direct.txt` catches `clientservices.googleapis.com`, `adservice.google.com`, `dl.google.com`. The fix (explicit Google DOMAIN-SUFFIX rules at the top) ships in every variant; pull a fresh subscription if you see it |
 
 ---
 

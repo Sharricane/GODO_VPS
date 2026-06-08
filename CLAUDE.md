@@ -50,6 +50,29 @@ SSH 端口：（硬化后更新）
 - **修改服务端配置前先备份**：`cp /etc/sing-box/config.json /etc/sing-box/config.json.bak`
 - **与用户沟通用中文**
 - **提交前运行** `git status` 确认 `.env` 不在暂存区
+- **5+ 设备在用，绝不重启 sing-box / nginx**（细节见 memory/feedback_no_prod_disruption.md）
+- **改 YAML 前先 grep 真实代理组名**（曾因 `🚀 Proxy` 误填导致整套配置炸；组名以文件里 `proxy-groups` 段为准）
+- **改 YAML 后必须用 python3 -c 'yaml.safe_load' 验证**，再检查 rules[*] 引用的 group 是否存在
+
+## 客户端核心分类（决定能用什么 YAML）
+
+| 客户端 | 核心 | 支持协议 | YAML 必须避开 |
+|---|---|---|---|
+| ClashX Pro (Mac) | legacy Clash | VMess / SS / Trojan | VLESS, Hysteria2, RULE-SET 用部分版本不识别 |
+| Clash for Windows | legacy Clash | 同上 | 同上 |
+| Clash for Android (原版) | legacy Clash | 同上 | 同上 |
+| Clash Verge Rev | mihomo | VLESS, Reality, Hysteria2, ws-opts, sniffer | — |
+| FlClash / ClashMetaForAndroid | mihomo | 同上 | — |
+| ClashMi (iOS) | mihomo | 同上，但 iOS extension 沙箱限制 | `dns.listen`, `external-controller`, `bind-address`, `allow-lan` 会被静默拒绝 |
+
+**legacy 客户端导入 VLESS proxy 会报 `unsupport type vless` 并整套配置加载失败。** 给 legacy 客户端的 YAML 只能有 VMess 节点（CFW 变种就是为此而生）。
+
+## 已知坑
+
+- **Loyalsoldier `direct.txt` 包含 Google 子域名**（`clientservices.googleapis.com`, `adservice.google.com`, `dl.google.com` 等）。任何用 `RULE-SET,direct,DIRECT` 的配置必须在它之前放显式 `DOMAIN-SUFFIX,google.com,Proxy` 等规则，否则 Google 搜索在 HK / CN 看起来加载了但实际部分服务挂掉（无补全、无图、无搜索结果）。已在 4 个 builder 全部修复。
+- **fake-ip 模式下 `GEOIP,CN,DIRECT,no-resolve` 失效**——fake IP 不在 CN 段。要用 `GEOSITE,CN,DIRECT` 或去掉 `no-resolve`。
+- **iOS Claude / ChatGPT app 用 HTTP/3 (QUIC over UDP 443)**，TUN 模式必须开 `sniffer.sniff.QUIC` 否则流量绕过代理，或加 `AND,((NETWORK,UDP),(DST-PORT,443)),REJECT` 强制 TCP 回退。
+- **Reality / Hysteria2 在中国移动/联通 DPI 下被限速到 ~2000ms**——CDN-VMess 通道为此而生（经 Cloudflare 伪装成正常 HTTPS 网站访问）。
 
 ## 本地工具
 
