@@ -53,6 +53,7 @@ SSH 端口：（硬化后更新）
 - **5+ 设备在用，绝不重启 sing-box / nginx**（细节见 memory/feedback_no_prod_disruption.md）
 - **改 YAML 前先 grep 真实代理组名**（曾因 `🚀 Proxy` 误填导致整套配置炸；组名以文件里 `proxy-groups` 段为准）
 - **改 YAML 后必须用 python3 -c 'yaml.safe_load' 验证**，再检查 rules[*] 引用的 group 是否存在
+- **需要换协议栈但又不能重启 sing-box 时**：起独立进程在另一个端口（如 xray :10087），nginx upstream `sed` 改端口 + `nginx -s reload`。nginx 老 worker 自然 drain 旧连接，新 worker 接管新连接，**用户零感知**（已用于修 multiplex 的 broken pipe 问题）
 
 ## 客户端核心分类（决定能用什么 YAML）
 
@@ -73,6 +74,18 @@ SSH 端口：（硬化后更新）
 - **fake-ip 模式下 `GEOIP,CN,DIRECT,no-resolve` 失效**——fake IP 不在 CN 段。要用 `GEOSITE,CN,DIRECT` 或去掉 `no-resolve`。
 - **iOS Claude / ChatGPT app 用 HTTP/3 (QUIC over UDP 443)**，TUN 模式必须开 `sniffer.sniff.QUIC` 否则流量绕过代理，或加 `AND,((NETWORK,UDP),(DST-PORT,443)),REJECT` 强制 TCP 回退。
 - **Reality / Hysteria2 在中国移动/联通 DPI 下被限速到 ~2000ms**——CDN-VMess 通道为此而生（经 Cloudflare 伪装成正常 HTTPS 网站访问）。
+- **sing-box VMess inbound 的 `multiplex.enabled: true` 会让 Claude SSE 流式响应间歇 broken pipe**（legacy Clash 客户端 + mihomo 都中招，3-5% 概率）。当前修法：**xray 作为 parallel VMess inbound 跑在 127.0.0.1:10087，nginx upstream 切过去**。sing-box 的 :10086 留着不动当冷备，等下次自然重启再清理 multiplex 行。
+- **xray + sing-box 共存**：不是替换，是平行。VLESS+Reality（:443 TCP）和 Hysteria2（:443 / :8443 UDP）继续在 sing-box；VMess 入站换 xray。两个进程互不干扰，systemd 各自管理。
+
+## 服务清单（VPS 当前实际运行）
+
+| 服务 | 端口 / 路径 | 用途 |
+|---|---|---|
+| sing-box.service | `:443 TCP` | VLESS+Reality（iOS / mihomo 客户端直连快速通道） |
+| sing-box.service | `:443 UDP`, `:8443 UDP` | Hysteria2 |
+| sing-box.service | `127.0.0.1:10086` | VMess（**冷备**，nginx 已不再路由到此） |
+| xray.service | `127.0.0.1:10087` | VMess WS `/vmws`（**主用**，无 multiplex，修复 Claude SSE） |
+| nginx.service | `:80` | 静态订阅 yaml + `/vmws` 反代到 `127.0.0.1:10087` |
 
 ## 本地工具
 

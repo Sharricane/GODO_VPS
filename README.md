@@ -152,14 +152,21 @@ motivated the CDN-VMess work.
       nginx :80
         default_server  (sites-enabled/sub)
           /*.yaml         -> /var/www/sub/    (subscription delivery)
-          /vmws           -> 127.0.0.1:10086  (vmess-in upstream)
+          /vmws           -> 127.0.0.1:10087  (xray vmess-in, current upstream)
           /               -> 404
 
       sing-box (NRestarts = 0 since deploy)
         :443 TCP   VLESS-Reality        (legacy direct path)
         :443 UDP   Hysteria2            (legacy direct path)
         :8443 UDP  Hysteria2            (legacy direct path)
-        127.0.0.1:10086  vmess-in WS path /vmws   (CDN front pipeline)
+        127.0.0.1:10086  vmess-in WS path /vmws   (legacy / fallback only,
+                                                   nginx no longer points here)
+
+      xray (parallel VMess inbound, added to fix multiplex breakage)
+        127.0.0.1:10087  vmess-in WS path /vmws   (CDN front pipeline,
+                                                   no multiplex -> no broken pipe
+                                                   on streaming responses like
+                                                   Claude SSE)
 
       cron
         /etc/cron.d/godo-traffic     (every minute, passive byte sampler)
@@ -250,6 +257,37 @@ Pages site, other subdomains) keeps its existing SSL mode.
 | Mac / Windows DIRECT slow                                           | Stale subscription with old rule-providers - delete subscription entry, re-add URL, kill client  |
 | Mac (ClashX Pro) or Android (legacy Clash) reports `unsupport type vless` | Client uses legacy Clash core (no VLESS / Hysteria2). Switch them to the `--cfw` (legacy) variant - VMess-only with Direct-VMess + CDN-VMess |
 | Google search loads but autocomplete / images / Ads / Maps silently fail | Loyalsoldier `direct.txt` catches `clientservices.googleapis.com`, `adservice.google.com`, `dl.google.com`. The fix (explicit Google DOMAIN-SUFFIX rules at the top) ships in every variant; pull a fresh subscription if you see it |
+| Claude app streaming responses cut off mid-reply, "Network error" after a few seconds | sing-box's vmess inbound auto-detects sing-mux from client; on long-lived SSE streams that handshake stalls and produces `connection download handshake: write tcp ... broken pipe`. Mitigation: route CDN-VMess through the parallel xray inbound on 127.0.0.1:10087 (no multiplex). nginx upstream switch is graceful — no client visible drop. sing-box VMess on :10086 stays as silent fallback |
+
+---
+
+## Parallel xray VMess inbound (Claude SSE fix)
+
+sing-box's vmess inbound enables `multiplex` auto-detect. With legacy Clash
+core clients (Mac ClashX Pro, Windows CFW, Android original Clash) the mux
+fallback path occasionally drops the connection's downstream write during
+a long streaming response - log lines like
+`connection download handshake: write tcp 127.0.0.1:10086->...: broken pipe`.
+Claude's API uses SSE for chat completions, so the broken-pipe rate (3-5 %)
+maps directly to "Claude app shows Network error" symptoms.
+
+xray-core is run as a parallel service on `127.0.0.1:10087` with the same
+UUID and `/vmws` WebSocket path, but without multiplex. nginx upstream
+points to `:10087`. Switching upstream is done with `nginx -s reload`
+(graceful), so existing WebSocket connections keep being served by the old
+worker until they close naturally and never see a TCP RST.
+
+    /etc/xray/config.json        vmess WS :10087, no multiplex
+    /etc/systemd/system/xray.service  hardened unit, DynamicUser, ProtectSystem strict
+
+The sing-box vmess inbound on `:10086` is left configured but unused -
+no traffic flows to it because nginx no longer routes there. Removing the
+`"multiplex": {"enabled": true}` line in `/etc/sing-box/config.json`
+would let nginx swap back, but that change requires a sing-box restart
+and is deferred.
+
+If xray ever needs to be restarted, **it does not affect VLESS-Reality
+or Hysteria2** - those live in sing-box, which is a different process.
 
 ---
 
