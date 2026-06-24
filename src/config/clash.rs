@@ -544,6 +544,15 @@ proxy-groups:
 {cdn_in_select}      - DIRECT
 
 rules:
+  # === Force HTTP/3 fallback to HTTP/2 (HIGHEST PRIORITY, iOS only) ===
+  # SG-Reality and SG-Hysteria2 cannot forward arbitrary UDP from a fake-ip
+  # interception, so QUIC traffic to anthropic.com / claude.ai sits in the
+  # proxy-group until NSURLSession's 10 s timeout fires and the iOS app shows
+  # "something went wrong" before reaching login. Returning REJECT here sends
+  # an immediate ICMP unreachable, which Apple's URLSession reads as
+  # "this network does not support QUIC" and downgrades to HTTP/2 in ms.
+  - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
+
   # === Google services explicitly Proxy (HIGHEST PRIORITY) ===
   # Loyalsoldier direct.txt catches clientservices.googleapis.com,
   # adservice.google.com, dl.google.com etc. as DIRECT and breaks
