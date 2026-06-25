@@ -458,15 +458,15 @@ ipv6: true
 dns:
   enable: true
   ipv6: true
-  enhanced-mode: fake-ip
-  fake-ip-range: 198.18.0.1/16
-  fake-ip-filter:
-    - "*.lan"
-    - "*.local"
-    - "localhost.ptlogin2.qq.com"
-    - "+.xn--7xa.monster"   # our own proxy domain — must resolve to real IP
-    - "+.msftconnecttest.com"
-    - "+.msftncsi.com"
+  # REVERTED to redir-host (was fake-ip from 5f71f1c onwards).
+  # fake-ip + sniffer's parse-pure-ip / override-destination / force-dns-mapping
+  # mutate the TLS stream's destination mid-handshake, which Anthropic's mobile
+  # API mTLS rejects, surfacing as 'something went wrong' on the iOS Claude
+  # app's splash screen. With redir-host the DNS layer returns real IPs, mihomo
+  # routes by the original hostname recovered from its DNS cache, and the TLS
+  # bytes pass through untouched. The May-30 e9d5f0b iOS variant used redir-host
+  # and worked; revert to that.
+  enhanced-mode: redir-host
   default-nameserver:
     - 223.5.5.5
     - 119.29.29.29
@@ -480,25 +480,10 @@ dns:
     geoip: true
     geoip-code: CN
 
-# sniffer recovers the original hostname from TLS SNI / QUIC ClientHello / HTTP Host,
-# so when an app fires HTTP/3 (UDP) at a fake-ip, mihomo still applies the right rule.
-# parse-pure-ip + override-destination are required for fake-ip to work end-to-end on iOS.
-sniffer:
-  enable: true
-  parse-pure-ip: true
-  override-destination: true
-  force-dns-mapping: true
-  sniff:
-    TLS:
-      ports: [443, 8443]
-    QUIC:
-      ports: [443, 8443]
-    HTTP:
-      ports: [80, "8080-8880"]
-  skip-domain:
-    - "+.xn--7xa.monster"
-    - "Mijia Cloud"
-    - "+.push.apple.com"
+# sniffer block intentionally absent — redir-host does not need it. The previous
+# sniffer with parse-pure-ip/override-destination/force-dns-mapping was added
+# only to compensate for fake-ip, and was the actual cause of the Anthropic
+# mTLS breakage.
 
 proxies:
   - name: "SG-Reality"
@@ -552,6 +537,17 @@ rules:
   # an immediate ICMP unreachable, which Apple's URLSession reads as
   # "this network does not support QUIC" and downgrades to HTTP/2 in ms.
   - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
+
+  # === Anthropic / Claude force-route to CDN-VMess (WARP outbound) ===
+  # CDN-VMess flows through nginx /vmws -> xray-warp on 127.0.0.1:10088,
+  # whose wireguard outbound exits as a Cloudflare WARP IP. SG-Reality and
+  # SG-Hysteria2 exit as the GigsGigsCloud Singapore IP, which Anthropic's
+  # mobile API a-api.anthropic.com soft-rejects (TCP/TLS OK, single request
+  # then 'something went wrong' before the Claude app login screen).
+  - DOMAIN-SUFFIX,anthropic.com,CDN-VMess
+  - DOMAIN-SUFFIX,claude.ai,CDN-VMess
+  - DOMAIN-SUFFIX,claude.com,CDN-VMess
+  - DOMAIN-KEYWORD,anthropic,CDN-VMess
 
   # === Google services explicitly Proxy (HIGHEST PRIORITY) ===
   # Loyalsoldier direct.txt catches clientservices.googleapis.com,

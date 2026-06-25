@@ -152,21 +152,24 @@ motivated the CDN-VMess work.
       nginx :80
         default_server  (sites-enabled/sub)
           /*.yaml         -> /var/www/sub/    (subscription delivery)
-          /vmws           -> 127.0.0.1:10087  (xray vmess-in, current upstream)
+          /vmws           -> 127.0.0.1:10088  (xray-warp vmess-in, current upstream)
           /               -> 404
 
       sing-box (NRestarts = 0 since deploy)
-        :443 TCP   VLESS-Reality        (legacy direct path)
-        :443 UDP   Hysteria2            (legacy direct path)
-        :8443 UDP  Hysteria2            (legacy direct path)
-        127.0.0.1:10086  vmess-in WS path /vmws   (legacy / fallback only,
-                                                   nginx no longer points here)
+        :443 TCP   VLESS-Reality        (legacy direct path, Singapore VPS IP)
+        :443 UDP   Hysteria2            (legacy direct path, Singapore VPS IP)
+        :8443 UDP  Hysteria2            (legacy direct path, Singapore VPS IP)
+        127.0.0.1:10086  vmess-in WS path /vmws   (cold, nginx not pointing here)
 
-      xray (parallel VMess inbound, added to fix multiplex breakage)
-        127.0.0.1:10087  vmess-in WS path /vmws   (CDN front pipeline,
-                                                   no multiplex -> no broken pipe
-                                                   on streaming responses like
-                                                   Claude SSE)
+      xray (first parallel VMess inbound, added to fix multiplex breakage)
+        127.0.0.1:10087  vmess-in WS path /vmws   (cold, nginx not pointing here,
+                                                   superseded by xray-warp)
+
+      xray-warp (second parallel VMess inbound, WARP outbound for anthropic)
+        127.0.0.1:10088  vmess-in WS path /vmws   (current /vmws upstream)
+          routing:
+            anthropic.com / claude.ai / claude.com  -> wireguard outbound (WARP)
+            everything else                          -> freedom (Singapore VPS IP)
 
       cron
         /etc/cron.d/godo-traffic     (every minute, passive byte sampler)

@@ -76,6 +76,9 @@ SSH 端口：（硬化后更新）
 - **Reality / Hysteria2 在中国移动/联通 DPI 下被限速到 ~2000ms**——CDN-VMess 通道为此而生（经 Cloudflare 伪装成正常 HTTPS 网站访问）。
 - **sing-box VMess inbound 的 `multiplex.enabled: true` 会让 Claude SSE 流式响应间歇 broken pipe**（legacy Clash 客户端 + mihomo 都中招，3-5% 概率）。当前修法：**xray 作为 parallel VMess inbound 跑在 127.0.0.1:10087，nginx upstream 切过去**。sing-box 的 :10086 留着不动当冷备，等下次自然重启再清理 multiplex 行。
 - **xray + sing-box 共存**：不是替换，是平行。VLESS+Reality（:443 TCP）和 Hysteria2（:443 / :8443 UDP）继续在 sing-box；VMess 入站换 xray。两个进程互不干扰，systemd 各自管理。
+- **iOS 必须用 redir-host DNS 模式，不能用 fake-ip**（mihomo / Clash Mi）。fake-ip 必须配 sniffer.parse-pure-ip + override-destination + force-dns-mapping 才能恢复目标域名，但**这三个选项会在 TLS 握手中途改写 destination，Anthropic 移动端 API 严格 mTLS 校验**直接拒，iOS Claude app 卡 splash 报 "something went wrong"。redir-host 模式 DNS 返回真实 IP，mihomo 从 DNS 缓存反查域名做路由，TLS 字节流原封不动透传 → Anthropic mTLS 不会出问题。**rules 的 `GEOIP,CN,DIRECT,no-resolve` 失效坑只存在于 fake-ip 模式，redir-host 没有这个问题。** 5月30号 commit e9d5f0b 用的就是 redir-host，能用；5月31号 commit 5f71f1c 改成 fake-ip + 激进 sniffer 后炸了 iOS Claude app，几周后才查到。**iOS yaml 永远 redir-host。**
+- **Anthropic 移动端 API 对 datacenter IP 软拒**：a-api.anthropic.com 的 TCP / TLS 握手对 GigsGigsCloud Singapore IP 全部成功，但应用层第一个请求 Anthropic 返回 app 无法接受的响应（疑似设备 attestation 校验失败 / WAF challenge），iOS / Android Claude app 都卡 splash。修法：**装 xray-warp.service 作为 xray-with-WireGuard-WARP-outbound，nginx upstream 切到它，所有 anthropic / claude 域名 routing 规则指向 warp 出站**。出口 IP 变成 Cloudflare 内部 IP，Anthropic 看到 CF 流量后不再 soft-reject。Mac Claude Code 不受影响（同一条链路，WARP 也接受 Mac 的 API key 流量）。
+- **xray 不支持 SIGHUP 配置热重载**——和 sing-box 一样。要改 xray 的 outbound / routing，**起新的 xray-warp.service 跑在另一个端口，nginx upstream 切上游 + `nginx -s reload` 优雅切换**，老 xray 维持现有连接到自然 close，零客户端断流。这套模式（"平行新服务 + nginx 上游切换"）现在 VPS 上已用了两次：sing-box VMess :10086 → xray :10087（删 multiplex），xray :10087 → xray-warp :10088（加 WARP 出站）。
 
 ## 服务清单（VPS 当前实际运行）
 
@@ -84,8 +87,9 @@ SSH 端口：（硬化后更新）
 | sing-box.service | `:443 TCP` | VLESS+Reality（iOS / mihomo 客户端直连快速通道） |
 | sing-box.service | `:443 UDP`, `:8443 UDP` | Hysteria2 |
 | sing-box.service | `127.0.0.1:10086` | VMess（**冷备**，nginx 已不再路由到此） |
-| xray.service | `127.0.0.1:10087` | VMess WS `/vmws`（**主用**，无 multiplex，修复 Claude SSE） |
-| nginx.service | `:80` | 静态订阅 yaml + `/vmws` 反代到 `127.0.0.1:10087` |
+| xray.service | `127.0.0.1:10087` | VMess WS `/vmws`（**冷备**，nginx 已不再路由到此，被 xray-warp 取代） |
+| xray-warp.service | `127.0.0.1:10088` | VMess WS `/vmws`（**主用**），anthropic 域名走 WireGuard 到 Cloudflare WARP 出站；其他域名走 freedom direct 出站 |
+| nginx.service | `:80` | 静态订阅 yaml + `/vmws` 反代到 `127.0.0.1:10088` |
 
 ## 本地工具
 
